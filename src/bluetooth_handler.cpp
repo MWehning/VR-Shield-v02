@@ -28,7 +28,7 @@ bool SetupSerial() {
 // Publishes a message or packet on Serial as well as Bluetooth
 void Publish(String msg) {
     if(msg.length()>1){
-        Serial.println(msg);
+        Serial.println(msg);               
         SerialBT.println(msg);
     }
 }
@@ -87,7 +87,7 @@ String PacketBuilder(uint32_t vid,
 
 String ErrorPacket(int type) {
     String strbuffer = "";              // TODO: give v_id with error
-    byte Empty = 0b00000000;
+    byte Empty = '0';
     for(int i=3;i>(PACKETLN-1);i++){    // 0-17 0b00000000
         strbuffer += Empty;
     }
