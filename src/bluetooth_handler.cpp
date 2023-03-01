@@ -86,13 +86,14 @@ String PacketBuilder(uint32_t vid,
 }
 
 String ErrorPacket(int type) {
-    String strbuffer = "";              // TODO: give v_id with error
-    byte Empty = '0';
+    /* String strbuffer = "";              // TODO: give v_id with error
+    byte Empty = '-';
     for(int i=3;i>(PACKETLN-1);i++){    // 0-17 0b00000000
         strbuffer += Empty;
     }
     strbuffer+=type;                    // last digit == error code
-    return strbuffer;
+    return strbuffer; */
+    return ("-------------------");
 }
 
 String IniPacket(){
