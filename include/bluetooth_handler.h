@@ -1,8 +1,9 @@
 #include "BluetoothSerial.h"
 
-extern String receivedPackage;
-extern uint32_t contentsD[6];
-extern uint32_t contentsM[12];
+extern uint8_t contentsD[5];
+extern uint8_t contentsM[5];
+extern uint8_t byteR[11];
+extern uint8_t error[11];
 
 //Setup
 bool SetupBluetooth();
@@ -10,10 +11,10 @@ bool SetupSerial();
 
 // Port register management
 int Receiver();
-void Publish(String msg);
+void Publish(u_int8_t msg[10]);
 
 //Packet builders
-String PacketBuilder(uint32_t vid, uint8_t id1, uint16_t v1, uint8_t id2=0, uint16_t v2=0, uint8_t id3=0, uint16_t v3=0);
+bool PacketBuilder(uint32_t vid, uint8_t id1, uint16_t v1, uint8_t id2=0, uint16_t v2=0, uint8_t id3=0, uint16_t v3=0);
 String ErrorPacket(int type);
 String IniPacket();
 
