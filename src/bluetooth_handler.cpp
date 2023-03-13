@@ -174,7 +174,7 @@ void StateMachine(byte storage[5])
 
 // Reads out packets from the registers assigned to communication,
 // returned value shows if there's a new message
-int Receiver(byte storage[5])
+bool Receiver(byte storage[5])
 {
     if(SerialBT.available()){
         block = SerialBT.read();
@@ -200,7 +200,7 @@ void printPackageContents(char Type)
 
     if (Type == 'D')
     {
-        Serial.println("----------------");
+        Serial.println("\n----------------");
         Serial.println("D-Type package");
         Serial.printf("Device:%03d\n", contentsD[0]);
         Serial.printf("Data ID1:%03d\n", contentsD[1]);
@@ -211,7 +211,7 @@ void printPackageContents(char Type)
     }
     else if (Type == 'M')
     {
-        Serial.println("----------------");
+        Serial.println("\n----------------");
         Serial.println("M-Type package");
         Serial.printf("Device:%03d\n", contentsM[0]);
         Serial.print("Data points: ");
@@ -221,7 +221,7 @@ void printPackageContents(char Type)
     }
     else if (Type = 'R')
     {
-        Serial.println("----------------");
+        Serial.println("\n----------------");
         Serial.println("Responded with");
         Serial.printf("Device:%03d\n", contentsR[0]);
         Serial.printf("Data ID1:%03d\n", contentsR[1]);
@@ -234,30 +234,28 @@ void printPackageContents(char Type)
     }
 }
 
-bool Decoder(byte input[5]){
+char Decoder(byte input[5]){
     switch (input[0]){
         case 'D':
             contentsD[0]=input[1];
             contentsD[1]=input[2];
             contentsD[2]=input[3];
             contentsD[3]=input[4];
-            printPackageContents('D');
-            return true;
+            return 'D';
             break;
         case 'M':
             contentsM[0]=input[1];
             contentsM[1]=input[2];
             contentsM[2]=input[3];
             contentsM[3]=input[4];
-            printPackageContents('M');
-            return true;
+            return 'M';
             break;
         default:
-            Serial.println("Unknown Packet Type");
+            
             /* for(int i = 0 ; i<5;i++){
                 Serial.print((char)input[i]); 
-            }*/Serial.println("");
-            return false;
+            }*/
+            return 'E';
             break;
     }
 }
