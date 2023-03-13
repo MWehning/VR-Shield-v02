@@ -2,6 +2,7 @@
 // #include "v_id_handler.h"
 
 unsigned long previousMillis;
+byte storage[5];
 
 bool debugflag = false;
 
@@ -16,8 +17,8 @@ void setup()
 
 void loop()
 {
-	if(Receiver()){			// Receive == true if there's a new valid message
-		Decoder(valid);		// decode received message and put into appropiate values
+	if(Receiver(storage)){			// Receive == true if there's a new valid message
+		Decoder(storage);		// decode received message and put into appropiate values
 	}
 
 	if (millis() - previousMillis > 1000)

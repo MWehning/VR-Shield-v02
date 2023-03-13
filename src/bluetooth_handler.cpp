@@ -10,7 +10,6 @@ const byte PKGSIZE = 5;
 uint8_t pointer = 0;
 byte received[PKGSIZE];
 byte block = 0;
-byte valid[PKGSIZE];
 bool msgready = false;
 
 uint8_t byteR[MSGLEN];
@@ -86,35 +85,36 @@ String IniPacket()
     return ("Still needs to be implemented"); // TODO: IMPLEMENT INI PROTOCOL
 }
 
-void SerialReceiver()
+void StateMachine(byte storage[5])
 {
-
-    if (Serial.available())
-    {
-        block = Serial.read();
         byte a = 0b00;
-        if (block == 255) // escapement byte
-            a = a || 0b01;
+        if (block >= 123) // escapement byte
+            a = a + 0b10;   
         if (pointer >= 5) // full message worth of bytes
-            a = a || 0b10;
+            a = a + 0b01;
 
+        
         switch (state)
         {
         case 0:
             pointer = 0;
             switch (a)
             {
-            case 10:
+            case 0b10:
+                state = 1;
+                break;
+            case 0b11:          // pointer isnt refreshed yet in state chart
                 state = 1;
                 break;
             default:
                 state = 0;
                 break;
             }
+            break;
         case 1:
             switch (a)
             {
-            case 00:
+            case 0b00:
                 received[pointer] = block;
                 pointer++;
                 state = 2;
@@ -123,36 +123,37 @@ void SerialReceiver()
                 state = 1;
                 break;
             }
+            break;
         case 2:
 
             switch (a)
             {
-            case 00:
+            case 0b00:
                 received[pointer] = block;
                 pointer++;
                 state = 2;
                 break;
-            case 10:
+            case 0b10:
                 state = 3;
                 break;
-            case 11:
-                for (int i : received)
+            case 0b11:
+                for (int i = 0; i<MSGLEN; i++)
                 {
-                    valid[i] = received[i];
-                    state = 0;
+                    storage[i] = received[i];
                 }
+                state = 0;
                 msgready = true;
-                Serial.println("new message");
                 break;
             default:
                 state = 0;
                 break;
             }
+            break;
         case 3:
 
             switch (a)
             {
-            case 10:
+            case 0b10:
                 received[pointer] = block;
                 pointer++;
                 state = 2;
@@ -161,176 +162,36 @@ void SerialReceiver()
                 state = 0;
                 break;
             }
+            break;
         }
-        /*  block = Serial.read();
-         bool escapement = false;
-         if(block==255){
-             escapement = true;
-         }
-         switch (state){
-             case 0:                             // SoF
-                 if(escapement)
-                     state = 1;
-                 pointer = 0;
-                 break;
-
-             case 1:
-                 if(escapement){
-                     state = 0;
-                     break;
-                 }
-                 state = 2;                      // start of message
-                 received[pointer] = block;
-                 pointer ++;
-                 break;
-
-             case 2:
-                 if(pointer == PKGSIZE){               // message complete
-                     if(escapement){
-                         for(int i : received){
-                             valid[i]=received[i];
-                         }
-                     }
-                     state = 0;
-                 }
-
-                 if(escapement){
-                     if(Serial.read() == 255){   // check next byte to see if escapement or SoF/EoF
-                         received[pointer] = 255;
-                         pointer ++;
-                     }else{
-                         state = 0;              // reset if escapement but not followed with another
-                     }
-                     break;
-                 }
-                 received[pointer] = block;      // non escapement chars are always valid
-                 pointer ++;
-                 break;
-
-             default:
-                 state = 0;
-                 break;
-         } */
-    }
-}
-
-void BluetoothReceiver()
-{
-    if (SerialBT.available())
-    {
-        block = SerialBT.read();
-        byte a = 0b00;
-        if (block == 255) // escapement byte
-            a = a || 0b01;
-        if (pointer >= 5) // full message worth of bytes
-            a = a || 0b10;
-
-        switch (state)
-        {
-        case 0:
-            pointer = 0;
-            switch (a)
-            {
-            case 10:
-                state = 1;
-                break;
-            default:
-                state = 0;
-                break;
-            }
-        case 1:
-            switch (a)
-            {
-            case 00:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            default:
-                state = 1;
-                break;
-            }
-        case 2:
-
-            switch (a)
-            {
-            case 00:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            case 10:
-                state = 3;
-                break;
-            case 11:
-                for (int i : received)
-                {
-                    valid[i] = received[i];
-                    state = 0;
-                }
-                msgready = true;
-                Serial.println("new message");
-                break;
-            default:
-                state = 0;
-                break;
-            }
-        case 3:
-
-            switch (a)
-            {
-            case 10:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            default:
-                state = 0;
-                break;
-            }
-        }
-    }
+        /* Serial.printf("Block :%02d\n",block);
+        Serial.printf("State :%02d\n",state);
+        Serial.printf("Pointer :%02d\n",pointer);
+        Serial.print("Condition :");
+        Serial.println(a,BIN); */
+        
 }
 
 // Reads out packets from the registers assigned to communication,
 // returned value shows if there's a new message
-int Receiver()
+int Receiver(byte storage[5])
 {
-    SerialReceiver();
-    BluetoothReceiver();
+    if(SerialBT.available()){
+        block = SerialBT.read();
+        StateMachine(storage);
+    }else if(Serial.available()){
+        block = Serial.read();
+        StateMachine(storage);
+    }
+        
     if(msgready){
-        return true;
         msgready = false;
+        return true;
+        
     }else{
         return false;
     }
     
-}
-
-bool Decoder(byte input[5]){
-    switch (input[0]){
-        case 'D':
-            contentsD[0]=input[1];
-            contentsD[1]=input[2];
-            contentsD[2]=input[3];
-            contentsD[3]=input[4];
-            printPackageContents('D');
-            break;
-        case 'M':
-            contentsD[0]=input[1];
-            contentsD[1]=input[2];
-            contentsD[2]=input[3];
-            contentsD[3]=input[4];
-            printPackageContents('M');
-            break;
-        default:
-            Serial.println("Unknown Packet Type");
-            for(int i = 0 ; i<5;i++){
-                Serial.print((char)input[i]);
-            }Serial.println("");
-            
-            break;
-    }
 }
 
 // Debug function used to visually represent last received packages(D- or M-Type)
@@ -370,5 +231,33 @@ void printPackageContents(char Type)
         Serial.printf("Data ID3:%03d\n", contentsR[5]);
         Serial.printf("Value:%03d\n", contentsR[6]);
         Serial.println("----------------");
+    }
+}
+
+bool Decoder(byte input[5]){
+    switch (input[0]){
+        case 'D':
+            contentsD[0]=input[1];
+            contentsD[1]=input[2];
+            contentsD[2]=input[3];
+            contentsD[3]=input[4];
+            printPackageContents('D');
+            return true;
+            break;
+        case 'M':
+            contentsM[0]=input[1];
+            contentsM[1]=input[2];
+            contentsM[2]=input[3];
+            contentsM[3]=input[4];
+            printPackageContents('M');
+            return true;
+            break;
+        default:
+            Serial.println("Unknown Packet Type");
+            /* for(int i = 0 ; i<5;i++){
+                Serial.print((char)input[i]); 
+            }*/Serial.println("");
+            return false;
+            break;
     }
 }

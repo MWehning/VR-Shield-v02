@@ -10,7 +10,7 @@ bool SetupBluetooth();
 bool SetupSerial();
 
 // Port register management
-int Receiver();
+int Receiver(byte storage[]);
 void Publish(u_int8_t msg[10]);
 
 //Packet builders
