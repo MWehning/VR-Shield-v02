@@ -14,7 +14,7 @@ char Receiver(byte storage[]);
 void Publish(u_int8_t msg[10]);
 
 //Packet builders
-bool PacketBuilder(uint32_t vid, uint8_t id1, uint16_t v1, uint8_t id2=0, uint16_t v2=0, uint8_t id3=0, uint16_t v3=0);
+bool PacketBuilder(uint16_t contents[]);
 String IniPacket();
 
 // Debug Tools

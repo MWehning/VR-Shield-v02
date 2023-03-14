@@ -20,22 +20,35 @@ void loop()
 	switch (Receiver(storage))
 	{ // decode received message and put into appropiate values
 	case 'D':
-		if (PacketBuilder(contentsD[0], 1, 1234, 2, 360)) // should be filled with Sensor Data
+	{
+		uint16_t bufferD[] = {contentsD[0], 0x01, 0x02, 0x03, 100, 200, 300};
+		if (PacketBuilder(bufferD)) // should be filled with Sensor Data
 			Publish(byteR);
 		if (debugflag)
 			printPackageContents('D');
 		break;
+	}
+
 	case 'M':
-		if (PacketBuilder(contentsM[0], 1, 1, 1, 1)) // confirmation message
+	{
+		uint16_t bufferM[] = {contentsM[0], 1, 1, 1, 1, 1, 1};
+		if (PacketBuilder(bufferM)) // confirmation message
 			Publish(byteR);
 		if (debugflag)
 			printPackageContents('M');
 		break;
+	}
+
 	case 'E':
-		if (PacketBuilder(0, 0, 0, 0, 0)) // Doesnt fit any scheme
+	{
+		uint16_t bufferE[] = {0, 0, 0, 0, 0, 0, 0};
+		if (PacketBuilder(bufferE)) // Doesnt fit any scheme
 			Publish(byteR);
 		if (debugflag)
 			Serial.println("\nUnknown Packet Type");
+		break;
+	}
+	default:
 		break;
 	}
 

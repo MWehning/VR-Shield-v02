@@ -1,6 +1,6 @@
 #include "BluetoothSerial.h"
 
-const byte MSGLEN = 11;
+const byte MSGLEN = 12;
 BluetoothSerial SerialBT;
 uint8_t contentsD[4];
 uint8_t contentsM[4];
@@ -13,8 +13,8 @@ byte block = 0;
 char Type;
 bool msgready = false;
 
-uint8_t byteR[MSGLEN];
-uint8_t error[MSGLEN] = {255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t byteR[100];
+uint8_t error[MSGLEN] = {255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255};
 
 uint8_t state = 0;
 
@@ -51,31 +51,48 @@ void Publish(uint8_t msg[MSGLEN])
 
 // Packet builder, assembles array from given values
 // based on D-Type Packet Protocol
-bool PacketBuilder(uint32_t vid,
-                   uint8_t id1, uint16_t v1, // required
-                   uint8_t id2 = 0, uint16_t v2 = 0,
-                   uint8_t id3 = 0, uint16_t v3 = 0)
+bool PacketBuilder(uint16_t contents[7])
 {
+    for(int i = 0;i<6;i++){
+        contentsR[i] = contents[i];     // vid, ad0, v0, ad1, v1, ad2, v2
+    }
+    
+   
 
-    contentsR[0] = vid;
-    contentsR[1] = id1;
-    contentsR[2] = v1;
-    contentsR[3] = id2;
-    contentsR[4] = v2;
-    contentsR[5] = id3;
-    contentsR[6] = v3;
+   
+    byteR[0]=255;               // SoF
+    if(contents[0]<123){
+        byteR[1]=contents[0];   // vid (can't use escapement)
+    }else{
+        return false;           // error, VID out of range
+    }
+    pointer = 1;
+    for(int i = 1;i<4;i++){
+        if(contents[i]>123){
+            byteR[pointer]=contents[i]; // adresses with a single byte
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+    }
 
-    byteR[0] = 255; // Start of Frame('o')
-    byteR[1] = vid;
-    byteR[2] = id1;
-    byteR[3] = v1 / 100; // '100'00
-    byteR[4] = v1 % 100; //  100'00'
-    byteR[5] = id2;
-    byteR[6] = v2 / 100; // '100'00
-    byteR[7] = v2 % 100; //  100'00'
-    byteR[8] = id3;
-    byteR[9] = v3 / 100;  // '100'00
-    byteR[10] = v3 % 100; //  100'00'
+    for(int i = 4;i<7;i++){             
+        if(highByte(contents[i])>123){
+            byteR[pointer]=contents[i]; // data with two bytes(High byte)
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+
+        if(lowByte(contents[i])>123){
+            byteR[pointer]=contents[i]; // data with two bytes(Low byte)
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+    }
+
+    byteR[pointer]=255;     //EoF
 
     return true;
 }
