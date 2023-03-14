@@ -1,19 +1,20 @@
 #include "BluetoothSerial.h"
 
-const byte MSGLEN = 11;
+const byte MSGLEN = 12;
 BluetoothSerial SerialBT;
-uint8_t contentsD[5];
-uint8_t contentsM[5];
+uint8_t contentsD[4];
+uint8_t contentsM[4];
 uint32_t contentsR[7];
 
-const byte PKGSIZE = 5;
+const byte PKGSIZE = 4;
 uint8_t pointer = 0;
 byte received[PKGSIZE];
 byte block = 0;
+char Type;
 bool msgready = false;
 
-uint8_t byteR[MSGLEN];
-uint8_t error[MSGLEN] = {255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t byteR[100];
+uint8_t error[MSGLEN] = {255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255};
 
 uint8_t state = 0;
 
@@ -50,35 +51,51 @@ void Publish(uint8_t msg[MSGLEN])
 
 // Packet builder, assembles array from given values
 // based on D-Type Packet Protocol
-bool PacketBuilder(uint32_t vid,
-                   uint8_t id1, uint16_t v1, // required
-                   uint8_t id2 = 0, uint16_t v2 = 0,
-                   uint8_t id3 = 0, uint16_t v3 = 0)
+bool PacketBuilder(uint16_t contents[7])
 {
+    for(int i = 0;i<6;i++){
+        contentsR[i] = contents[i];     // vid, ad0, v0, ad1, v1, ad2, v2
+    }
+    
+   
 
-    contentsR[0] = vid;
-    contentsR[1] = id1;
-    contentsR[2] = v1;
-    contentsR[3] = id2;
-    contentsR[4] = v2;
-    contentsR[5] = id3;
-    contentsR[6] = v3;
+   
+    byteR[0]=255;               // SoF
+    if(contents[0]<123){
+        byteR[1]=contents[0];   // vid (can't use escapement)
+    }else{
+        return false;           // error, VID out of range
+    }
+    pointer = 1;
+    for(int i = 1;i<4;i++){
+        if(contents[i]>123){
+            byteR[pointer]=contents[i]; // adresses with a single byte
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+    }
 
-    byteR[0] = 255; // Start of Frame('o')
-    byteR[1] = vid;
-    byteR[2] = id1;
-    byteR[3] = v1 / 100; // '100'00
-    byteR[4] = v1 % 100; //  100'00'
-    byteR[5] = id2;
-    byteR[6] = v2 / 100; // '100'00
-    byteR[7] = v2 % 100; //  100'00'
-    byteR[8] = id3;
-    byteR[9] = v3 / 100;  // '100'00
-    byteR[10] = v3 % 100; //  100'00'
+    for(int i = 4;i<7;i++){             
+        if(highByte(contents[i])>123){
+            byteR[pointer]=contents[i]; // data with two bytes(High byte)
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+
+        if(lowByte(contents[i])>123){
+            byteR[pointer]=contents[i]; // data with two bytes(Low byte)
+            pointer++;
+        }
+        byteR[pointer]=contents[i];
+        pointer++;
+    }
+
+    byteR[pointer]=255;     //EoF
 
     return true;
 }
-
 
 String IniPacket()
 {
@@ -87,111 +104,132 @@ String IniPacket()
 
 void StateMachine(byte storage[5])
 {
-        byte a = 0b00;
-        if (block >= 123) // escapement byte
-            a = a + 0b10;   
-        if (pointer >= 5) // full message worth of bytes
-            a = a + 0b01;
+    byte a = 0b00;
+    if (block >= 123) // escapement byte
+        a = a + 0b10;
+    if (pointer >= 4) // full message worth of bytes
+        a = a + 0b01;
 
-        
-        switch (state)
+    switch (state)
+    {
+    case 0:
+        pointer = 0;
+        switch (a)
         {
-        case 0:
-            pointer = 0;
-            switch (a)
-            {
-            case 0b10:
-                state = 1;
-                break;
-            case 0b11:          // pointer isnt refreshed yet in state chart
-                state = 1;
-                break;
-            default:
-                state = 0;
-                break;
-            }
+        case 0b10:
+            state = 1;
             break;
-        case 1:
-            switch (a)
-            {
-            case 0b00:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            default:
-                state = 1;
-                break;
-            }
+        case 0b11: // pointer isnt refreshed yet in state chart
+            state = 1;
             break;
-        case 2:
-
-            switch (a)
-            {
-            case 0b00:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            case 0b10:
-                state = 3;
-                break;
-            case 0b11:
-                for (int i = 0; i<MSGLEN; i++)
-                {
-                    storage[i] = received[i];
-                }
-                state = 0;
-                msgready = true;
-                break;
-            default:
-                state = 0;
-                break;
-            }
-            break;
-        case 3:
-
-            switch (a)
-            {
-            case 0b10:
-                received[pointer] = block;
-                pointer++;
-                state = 2;
-                break;
-            default:
-                state = 0;
-                break;
-            }
+        default:
+            state = 0;
             break;
         }
-        /* Serial.printf("Block :%02d\n",block);
-        Serial.printf("State :%02d\n",state);
-        Serial.printf("Pointer :%02d\n",pointer);
-        Serial.print("Condition :");
-        Serial.println(a,BIN); */
-        
+        break;
+    case 1:
+        switch (a)
+        {
+        case 0b00:
+            Type = (char)block;
+            state = 2;
+            break;
+        default:
+            state = 1;
+            break;
+        }
+        break;
+    case 2:
+
+        switch (a)
+        {
+        case 0b00:
+            received[pointer] = block;
+            pointer++;
+            state = 2;
+            break;
+        case 0b10:
+            state = 3;
+            break;
+        case 0b11:
+
+            state = 0;
+            if (Type == 'D')
+            {
+                for (int i = 0; i < PKGSIZE; i++)
+                {
+                    storage[i] = received[i];;
+                    contentsD[i] = received[i];; // put M-Contents from buffer to contents Array
+                }
+            }
+            else if (Type == 'M')
+            {
+                for (int i = 0; i < PKGSIZE; i++)
+                {
+                    storage[i] = received[i];
+                    contentsM[i] = received[i]; // put M-Contents from buffer to contents Array
+                }
+            }
+            else
+            {
+                for (int i = 0; i < PKGSIZE; i++)
+                {
+                    storage[i] = received[i]; // just return message, no decoding possible
+                }
+            }
+            msgready = true;
+            break;
+        default:
+            state = 0;
+            break;
+        }
+        break;
+    case 3:
+
+        switch (a)
+        {
+        case 0b10:
+            received[pointer] = block;
+            pointer++;
+            state = 2;
+            break;
+        default:
+            state = 0;
+            break;
+        }
+        break;
+    }
+    /* Serial.printf("Block :%02d\n",block);
+    Serial.printf("State :%02d\n",state);
+    Serial.printf("Pointer :%02d\n",pointer);
+    Serial.print("Condition :");
+    Serial.println(a,BIN); */
 }
 
 // Reads out packets from the registers assigned to communication,
 // returned value shows if there's a new message
-bool Receiver(byte storage[5])
+char Receiver(byte storage[PKGSIZE])
 {
-    if(SerialBT.available()){
+    if (SerialBT.available())
+    {
         block = SerialBT.read();
         StateMachine(storage);
-    }else if(Serial.available()){
+    }
+    else if (Serial.available())
+    {
         block = Serial.read();
         StateMachine(storage);
     }
-        
-    if(msgready){
-        msgready = false;
-        return true;
-        
-    }else{
-        return false;
+
+    if (!msgready)
+    {
+        return 0;
     }
-    
+    else
+    {
+        msgready = false;
+        return Type;
+    }
 }
 
 // Debug function used to visually represent last received packages(D- or M-Type)
@@ -231,31 +269,5 @@ void printPackageContents(char Type)
         Serial.printf("Data ID3:%03d\n", contentsR[5]);
         Serial.printf("Value:%03d\n", contentsR[6]);
         Serial.println("----------------");
-    }
-}
-
-char Decoder(byte input[5]){
-    switch (input[0]){
-        case 'D':
-            contentsD[0]=input[1];
-            contentsD[1]=input[2];
-            contentsD[2]=input[3];
-            contentsD[3]=input[4];
-            return 'D';
-            break;
-        case 'M':
-            contentsM[0]=input[1];
-            contentsM[1]=input[2];
-            contentsM[2]=input[3];
-            contentsM[3]=input[4];
-            return 'M';
-            break;
-        default:
-            
-            /* for(int i = 0 ; i<5;i++){
-                Serial.print((char)input[i]); 
-            }*/
-            return 'E';
-            break;
     }
 }
