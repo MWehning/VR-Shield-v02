@@ -1,65 +1,50 @@
 #include "bluetooth_handler.h"
-//#include "v_id_handler.h"
+// #include "v_id_handler.h"
 
 unsigned long previousMillis;
+byte storage[5];
 
-bool debugflag = false;
+bool debugflag = true;
 
-void setup() {
-  if(SetupBluetooth()&&SetupSerial())
-    if(debugflag) 
-      Serial.println("VR-Shield v2");
-  previousMillis = millis();
-  //Publish(IniPacket());
+void setup()
+{
+	if (SetupBluetooth() && SetupSerial())
+		if (debugflag)
+			Serial.println("VR-Shield v2");
+	previousMillis = millis();
+	// Publish(IniPacket());
 }
 
-void loop() {
-  switch (Receiver())                             // 0= No Packet 1=D-Type 2=M-Type 3=Unknown, puts contents into Sring receivedPackage
-  {
-  case 1:
-      if(debugflag){
-        printPackageContents('D');
-      } 
-      // TODO: RESPOND (EXAMPLE WITHOUT VALUES)
-      if(PacketBuilder(0x1,0x2,303,0x4,505,0x6,707)){
-        Publish(byteR);
-      }
-      
-      //Publish(PacketBuilder(contentsD[0],contentsD[2],4141,contentsD[3],4242,contentsD[4],4343));    
-      if(debugflag) 
-        printPackageContents('R');
-      break;
-  
-  case 2:
-      if(debugflag) 
-        printPackageContents('M');
+void loop()
+{
+	if(Receiver(storage)){			// Receive == true if there's a new valid message
+		switch(Decoder(storage)){	// decode received message and put into appropiate values
+			case 'D':
+				if(PacketBuilder(contentsD[0],1,1234,2,360))		// should be filled with Sensor Data
+					Publish(byteR);
+				if(debugflag) printPackageContents('D');
+				break;
+			case 'M':
+				if(PacketBuilder(contentsM[0],1,1,1,1))				// confirmation message
+					Publish(byteR);
+				if(debugflag) printPackageContents('M');
+				break;
+			case 'E':
+				if(PacketBuilder(0,0,0,0,0))						// Doesnt fit any scheme
+					Publish(byteR);
+				if(debugflag) Serial.println("\nUnknown Packet Type");
+				break;
+		}
+	}		
 
-      // TODO: CAST EVENT AND RESPOND (EXAMPLE OF CONFIRMATION)
-      if(PacketBuilder(0x1,0x1,1,0x1,1,0x1,1)){
-        Publish(byteR);
-      }
-      if(debugflag) 
-        printPackageContents('R');
-      break;
+	if (millis() - previousMillis > 1000)
+	{
+		if (!debugflag)
+		{
+			// Publish(PacketBuilder(16,1,1234,2,360));  // TODO: WHY DOES LEADING ZERO LEAD TO DIFFERENT ID?
+			// printPackageContents('R');
+		}
 
-  case 3:
-    if(debugflag) {
-      Serial.println("Unknown package");
-    }
-    Publish(error);                     // faulty message arrived
-    break;
-
-  default:                                      // nothing arrived
-    break;
-  }
-    
-
-  if (millis() - previousMillis > 1000) {
-    if(!debugflag){
-      //Publish(PacketBuilder(16,1,1234,2,360));  // TODO: WHY DOES LEADING ZERO LEAD TO DIFFERENT ID?
-      //printPackageContents('R');
-    } 
-
-    previousMillis  = millis();
-  }
+		previousMillis = millis();
+	}
 }
