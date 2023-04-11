@@ -4,7 +4,7 @@
 unsigned long previousMillis;
 byte storage[4];
 
-bool debugflag = true;
+bool debugflag = false;
 
 void setup()
 {
@@ -17,40 +17,11 @@ void setup()
 
 void loop()
 {
-	switch (Receiver(storage))
-	{ // decode received message and put into appropiate values
-	case 'D':
-	{
-		uint16_t bufferD[] = {contentsD[0], 0x01, 0x02, 0x03, 100, 200, 300};
-		if (PacketBuilder(bufferD)) // should be filled with Sensor Data
-			Publish(byteR);
-		if (debugflag)
-			printPackageContents('D');
-		break;
+	if(Receiver(storage)){
+		printPackageContents(storage);
 	}
 
-	case 'M':
-	{
-		uint16_t bufferM[] = {contentsM[0], 1, 1, 1, 1, 1, 1};
-		if (PacketBuilder(bufferM)) // confirmation message
-			Publish(byteR);
-		if (debugflag)
-			printPackageContents('M');
-		break;
-	}
 
-	case 'E':
-	{
-		uint16_t bufferE[] = {0, 0, 0, 0, 0, 0, 0};
-		if (PacketBuilder(bufferE)) // Doesnt fit any scheme
-			Publish(byteR);
-		if (debugflag)
-			Serial.println("\nUnknown Packet Type");
-		break;
-	}
-	default:
-		break;
-	}
 
 	if (millis() - previousMillis > 1000)
 	{

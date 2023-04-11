@@ -10,12 +10,12 @@ bool SetupBluetooth();
 bool SetupSerial();
 
 // Port register management
-char Receiver(byte storage[]);
-void Publish(u_int8_t msg[10]);
+bool Receiver(byte storage[]);
+void Publish(u_int8_t msg[]);
 
 //Packet builders
 bool PacketBuilder(uint16_t contents[]);
 String IniPacket();
 
 // Debug Tools
-void printPackageContents(char Type);
+void printPackageContents(byte storage[]);
