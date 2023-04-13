@@ -32,60 +32,28 @@ bool SetupSerial()
 }
 
 // Publishes a message or packet on Serial as well as Bluetooth
-void Publish(uint8_t msg[])
+void Publish(uint8_t addr[],float msg[])
 {
-    for (int i = 0; i <= pointer2; i++)
+    Serial.write(0xaa);
+    SerialBT.write(0xaa);
+    for (int i = 0; i <= PKGSIZE; i++)  // echo address
     {
-        Serial.write(msg[i]);
-        SerialBT.write(msg[i]);
+        Serial.write(addr[i]);
+        SerialBT.write(addr[i]);
     }
-}
-
-// Packet builder, assembles array from given values
-// based on D-Type Packet Protocol
-bool PacketBuilder(uint16_t contents[7])
-{
-    for(int i = 0;i<6;i++){
-        contentsR[i] = contents[i];     // vid, ad0, v0, ad1, v1, ad2, v2
+    for (int i = 0; msg[i]>=0; i++) // Write everything from msg buffer
+    {
+        byte hi = highByte((int)msg[i]);
+        byte lo = lowByte((int)msg[i]);
+        Serial.write(hi);
+        SerialBT.write(hi);
+        Serial.write(lo);
+        SerialBT.write(lo);
     }
-    
-   
-
-   
-    byteR[0]=255;               // SoF
-    if(contents[0]<123){
-        byteR[1]=(byte)contents[0];   // vid (can't use escapement)
-    }else{
-        return false;           // error, VID out of range
-    }
-    pointer2 = 2;
-    for(int i = 1;i<4;i++){
-        if(contents[i]>123){
-            byteR[pointer2]=lowByte(contents[i]); // adresses with a single byte
-            pointer2++;
-        }
-        byteR[pointer2]=lowByte(contents[i]);
-        pointer2++;
-    }
-
-    for(int i = 4;i<7;i++){             
-        if(highByte(contents[i])>123){
-            byteR[pointer2]=highByte(contents[i]); // data with two bytes(High byte)
-            pointer2++;
-        }
-        byteR[pointer2]=highByte(contents[i]);
-        pointer2++;
-
-        if(lowByte(contents[i])>123){
-            byteR[pointer2]=lowByte(contents[i]); // data with two bytes(Low byte)
-            pointer2++;
-        }
-        byteR[pointer2]=lowByte(contents[i]);
-        pointer2++;
-    }
-    byteR[pointer2] = 255;
-
-    return true;
+    Serial.write(0xaa);
+    SerialBT.write(0xaa);
+    Serial.write(0x00);
+    SerialBT.write(0x00);
 }
 
 
