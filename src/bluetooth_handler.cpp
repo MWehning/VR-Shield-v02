@@ -31,17 +31,39 @@ bool SetupSerial()
     return true;
 }
 
+
+// Greets or throws error
+// @param state Can all com ports be opened?
+// @param debugflag Decides if greeting is carried out
+// @return either nothing, a greeting or an error state
+void greetings(bool state,bool debugflag){
+    
+    if(state){
+        if(debugflag)Serial.println("VR-Shield V3");
+    }else{
+        for (int i = 0; i < 1000; i++)
+        {
+            delay(50);
+            Serial.println("ERROR");
+        }
+    }
+
+}
+
 // Publishes a message or packet on Serial as well as Bluetooth
+// @param addr[] address to be echoed
+// @param msg[] data that will be appended
+// @return A message in the correct format on both ports
 void Publish(uint8_t addr[],float msg[])
 {
     Serial.write(0xaa);
     SerialBT.write(0xaa);
-    for (int i = 0; i <= PKGSIZE; i++)  // echo address
+    for (byte i = 0; i < PKGSIZE; i++)  // echo address
     {
         Serial.write(addr[i]);
         SerialBT.write(addr[i]);
     }
-    for (int i = 0; msg[i]>=0; i++) // Write everything from msg buffer
+    for (int i = 0; msg[i]!=0; i++) // Write everything from msg buffer
     {
         byte hi = highByte((int)msg[i]);
         byte lo = lowByte((int)msg[i]);
@@ -57,6 +79,10 @@ void Publish(uint8_t addr[],float msg[])
 }
 
 
+// *Heart of package decoding
+// @param block single byte fed into machine
+// @param storage[] buffer to store message in if successful
+// @return msgready flag is set if a message is complete
 void StateMachine(byte storage[])
 {
     byte a = 0b00;
@@ -74,7 +100,7 @@ void StateMachine(byte storage[])
         case 0b10:
             state = 1;
             break;
-        case 0b11: // pointer isnt refreshed yet in state chart
+        case 0b11: // ! pointer isnt refreshed yet in state chart
             state = 1;
             break;
         default:
@@ -113,7 +139,7 @@ void StateMachine(byte storage[])
 
             for (int i = 0; i < PKGSIZE; i++)
             {
-                storage[i] = received[i];
+                storage[i] = received[i];           // *full message received
                 pointer = 0;
             }
 
@@ -140,16 +166,17 @@ void StateMachine(byte storage[])
         }
         break;
     }
-    Serial.printf("-----------\n");
+    /*Serial.printf("-----------\n");
     Serial.printf("Block :%02d\n",block);
     Serial.printf("State :%02d\n",state);
     Serial.printf("Pointer :%02d\n",pointer);
     Serial.print("Condition :");
-    Serial.println(a,BIN); 
+    Serial.println(a,BIN); */
 }
 
-// Reads out packets from the registers assigned to communication,
-// returned value shows if there's a new message
+// "Feeds" state machine from com ports
+// @param storage[] buffer array message will be stored in
+// @return true if a message is complete
 bool Receiver(byte storage[PKGSIZE])
 {
     if (SerialBT.available())

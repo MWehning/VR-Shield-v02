@@ -2,11 +2,15 @@
 #include <Wire.h>
 
 // Setup
+
 bool getDeviceData();
-bool setupDevices();
+void updateDeviceData();
+bool setupDevices(bool debugflag);
 
 // Debug Tools
+
 void printOutMask();
 
 // Data
-void getData(float buffer[],byte device_id, byte data_id);
+
+void getData(float buffer[],byte type, byte count);

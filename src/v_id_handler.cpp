@@ -5,10 +5,16 @@
 #define SAME_DEVICE_COUNT 5
 #define DEVICE_TYPES      4
 
+
 // pin defines
 #define LED_PIN           32
 #define I2C_POWER         19
 
+// device types
+#define MPU               0
+#define QMC               1
+#define BHL               2
+#define REL               3
 
 // Device type conversion: 
 // _00_|_01_|_02_|_03_|_04_|________
@@ -17,7 +23,12 @@
 //     |    |    |    |    | 2=>BHL
 //     |    |    |    |    | 3=>REL
 byte vid_mask[DEVICE_TYPES][SAME_DEVICE_COUNT]={ 0 };
+byte adresses[100]={ 0 };
 
+
+// writes a single message byte to an I²C device
+// @param addr is the address of said device
+// @param message is the message byte
 void wireWrite(byte addr, byte message){
   Wire.beginTransmission(addr);
   Wire.write(message);
@@ -79,51 +90,63 @@ void setupREL(){
   } 
 }
 
-bool getMPU(float values[],byte pos){
-  byte addr = vid_mask[0][pos];   // access device of type MPU(0) at position pos
-  wireWrite(addr,0x3b);
-  if(Wire.requestFrom(addr, 6, true)!=6)return false; 
-  for(int i = 0;i<3;i++){
-    values[i]=wireGet();
-    Serial.println(values[i]);
+// Gets Data from an I²C device specified in other arguments
+// @param values buffer array to store values in
+// @param type device type based on type table(see top of code)
+// @param count device count 
+// @return if it was able to get a value
+bool getData(float values[],byte type, byte count){
+  byte addr = vid_mask[type][count];  
+  switch (type)
+  {
+  case MPU:
+    wireWrite(addr,0x3b);
+    if(Wire.requestFrom(addr, 6, true)!=6)return false; 
+    for(int i = 0;i<3;i++){
+      values[i]=wireGet();
+    }
+    wireWrite(addr,0x43);
+    if(Wire.requestFrom(addr, 6, true)!=6)return false;  
+    for(int i = 3;i<6;i++){
+      values[i]=wireGet();
+      }
+    return true;
+
+  case QMC:
+    wireWrite(addr,0x00);
+    if(Wire.requestFrom(addr, 6, true)<1)return false; 
+    for(int i = 0;i<3;i++){
+      values[i]=wireGet();
+    }
+    return true;
+
+  case BHL:
+    if(Wire.requestFrom(addr, 2, true)<1)return false;
+    values[0]=wireGet();
+    return true;
+
+  case REL:
+    // TODO: get current Relais state
+    break;
+  
+  default:
+    break;
   }
-  wireWrite(addr,0x43);
-  if(Wire.requestFrom(addr, 6, true)!=6)return false;  
-  for(int i = 3;i<6;i++){
-    values[i]=wireGet();
-    Serial.println(values[i]);
-  }
-  return true;
 }
 
-bool getQMC(float values[3],byte pos){
-  byte addr = vid_mask[1][pos];   // access device of type QMC(0) at position pos
-  wireWrite(addr,0x00);
-  if(Wire.requestFrom(addr, 6, true)<1)return false; 
-  for(int i = 0;i<3;i++){
-    values[i]=wireGet();
-    Serial.println(values[i]);
-  }
-  return true;
-}
-
-bool getBHL(float *value, byte pos){
-  byte addr = vid_mask[1][pos];   // access device of type BHL(0) at position pos
-  if(Wire.requestFrom(addr, 2, true)<1)return false;
-  *value=wireGet();
-  Serial.println(*value);
-  return true;
-}
 
 
 // Inserts addr into the V_ID Mask, type is decided by 
-// value segregation, first empty slot is used for count
+// value segregation, first empty slot is used for count 
+// @param mux Multiplexer to be used
+// @param addr Address of device to be used
+// @return false if device somehow cant be added
 bool addToMask(byte mux ,byte addr){ 
 
   byte type = 0;    
   switch (addr)
   {
-  case 0x60 ... 0x70:
+  case 0x60 ... 0x70:         // *These define which address could be which device
     type = 0;
     break;
   case 0x00 ... 0x0f:
@@ -137,7 +160,7 @@ bool addToMask(byte mux ,byte addr){
     break;
   
   default:
-    return false;
+    return false;           // Not an address the system can work with
     break;
   }   
 
@@ -148,10 +171,20 @@ bool addToMask(byte mux ,byte addr){
       return true;
     }
   }
+
+  int p = 0;
+  while(adresses[p]==0){
+    p++;
+  }
+  adresses[p] = addr;     // puts array into occupied address list
+
   return false;
 }
 
 // Attempt to reach device at addr
+// @param mux Multiplexer to be used
+// @param addr Address of device to be usedr
+// @return state of device
 bool reachOut(byte mux,byte addr){       
   Wire.beginTransmission(addr); 
   if(Wire.endTransmission(true)){
@@ -172,6 +205,62 @@ bool getDeviceData(){
     }
   }
   return connections;
+}
+
+
+// debug tool for checking device function
+void healthCheck(){
+  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected MPUs
+    if(vid_mask[MPU][i]!=0){
+      float values[6] = { 0 };
+      if(getData(values,MPU,i)){
+        
+        Serial.printf("MPU %01d functional\n", i);
+      }else{
+        Serial.printf("MPU %01d doesn't return values, removing from table\n", i);
+        //removeDevice(0,i);              // TODO: Remove devices from both table and list
+      }
+    }
+  }
+
+  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected QMCs
+    if(vid_mask[QMC][i]!=0){
+      float values[3] = { 0 };
+      if(getData(values,QMC,i)){
+        Serial.printf("QMC %01d functional\n", i);
+      }else{
+        Serial.printf("QMC %01d doesn't return values\n", i);
+      }
+    }
+  }
+
+  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected BHLs
+    if(vid_mask[2][i]!=0){
+      float values[1] = { 0 };
+      if(getData(values,BHL,i)){
+        Serial.printf("BHL %01d functional\n", i);
+      }else{
+        Serial.printf("BHL %01d doesn't return values\n", i);
+      }
+    }
+  }
+}
+
+// manually triggered by user. Scans for all new devices and then removes ones not responding
+void updateDeviceData(){
+  byte addr_tryout = 0x00;       // current address to try
+  byte p = 0;                 // pointer for occupied list
+  while(addr_tryout<0x80){
+    if(addr_tryout!=adresses[p]){
+      if(reachOut(0x01,addr_tryout)){
+        addToMask(0x01,addr_tryout);
+      }                
+      if(adresses[p]!=0)
+        p++;                  // both numbers are sorted by size so this makes sense
+    }
+  addr_tryout++;  	          // TODO: Error, with every scan another instance of the same device is added
+  }
+  healthCheck();
 }
 
 
@@ -211,43 +300,10 @@ void printOutMask(){
   }
 }
 
-// debug tool for checking device function
-void healthCheck(){
-  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected MPUs
-    if(vid_mask[0][i]!=0){
-      float values[6] = { 0 };
-      if(getMPU(values,i)){
-        Serial.printf("MPU %01d functional\n", i);
-      }else{
-        Serial.printf("MPU %01d doesn't return values\n", i);
-      }
-    }
-  }
 
-  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected QMCs
-    if(vid_mask[1][i]!=0){
-      float values[3] = { 0 };
-      if(getQMC(values,i)){
-        Serial.printf("QMC %01d functional\n", i);
-      }else{
-        Serial.printf("QMC %01d doesn't return values\n", i);
-      }
-    }
-  }
-
-  for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected BHLs
-    if(vid_mask[2][i]!=0){
-      float value = 0;
-      if(getBHL(&value,i)){
-        Serial.printf("BHL %01d functional\n", i);
-      }else{
-        Serial.printf("BHL %01d doesn't return values\n", i);
-      }
-    }
-  }
-}
-
-void setupDevices() {
+// I²C setup and first scan
+// @param debugflag If true some information will be printed
+void setupDevices(bool debugflag) {
   pinMode(I2C_POWER,OUTPUT);
   pinMode(LED_PIN,OUTPUT);
   digitalWrite(I2C_POWER,LOW);
@@ -260,38 +316,17 @@ void setupDevices() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("Scanning for connected devices...");
+  if(debugflag)Serial.println("Scanning for connected devices...");
   getDeviceData();
   delay(1000);
-  Serial.println("Scanning done, found:");
-  delay(1000);
-  Serial.println("Setting up devices...");
+  if(debugflag)Serial.println("Setting up devices...");
   setupMPU();
   setupQMC();
   setupBHL();
   setupREL();
   delay(1000);
-  Serial.println("Testing function...");
+  if(debugflag)Serial.println("Testing function...");
   healthCheck();
   delay(1000);
 }
 
-void getData(float buffer[],byte device_id, byte data_id){
-byte type = device_id>>4;     //  Left 4 bits
-byte count= device_id & 0xf;  //  Right 4 bits
-switch (type)
-{
-case 0:
-    getMPU(buffer, count);
-    break;
-case 1:
-    getQMC(buffer, count);
-    break;
-case 2:
-    getBHL(buffer, count);
-    break;
-
-default:
-    break;
-}
-}
