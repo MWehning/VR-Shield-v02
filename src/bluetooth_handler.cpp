@@ -202,7 +202,9 @@ bool Receiver(byte storage[PKGSIZE])
 }
 
 // Debug function used to visually represent last received packages(D- or M-Type)
-void printPackageContents(byte storage[])
+void printPackageContents(byte storage[],bool debugflag)
 {
-    Serial.printf("e:0x%02x:0x%02x:0x%02x:e\n",storage[0],storage[1],storage[2]);
+    if(debugflag){
+        Serial.printf("e:0x%02x:0x%02x:0x%02x:e\n",storage[0],storage[1],storage[2]);
+    }
 }

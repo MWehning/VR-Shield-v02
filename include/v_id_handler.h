@@ -4,12 +4,12 @@
 // Setup
 
 bool getDeviceData();
-void updateDeviceData();
+void updateDeviceData(bool debugflag);
 bool setupDevices(bool debugflag);
 
 // Debug Tools
 
-void printOutMask();
+void printOutMask(bool debugflag);
 
 // Data
 

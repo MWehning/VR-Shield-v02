@@ -4,7 +4,7 @@
 // device matrice sizing 
 #define SAME_DEVICE_COUNT 5
 #define DEVICE_TYPES      4
-
+#define TOTAL_DEVICES     SAME_DEVICE_COUNT*DEVICE_TYPES
 
 // pin defines
 #define LED_PIN           32
@@ -23,7 +23,7 @@
 //     |    |    |    |    | 2=>BHL
 //     |    |    |    |    | 3=>REL
 byte vid_mask[DEVICE_TYPES][SAME_DEVICE_COUNT]={ 0 };
-byte adresses[100]={ 0 };
+byte adresses[TOTAL_DEVICES]={ 0 };
 
 
 // writes a single message byte to an I²C device
@@ -90,23 +90,45 @@ void setupREL(){
   } 
 }
 
-// Gets Data from an I²C device specified in other arguments
+// Gets Data from an I²C device specified in other arguments  // TODO: Doesnt return anything if device is only added in rescan
 // @param values buffer array to store values in
 // @param type device type based on type table(see top of code)
 // @param count device count 
 // @return if it was able to get a value
-bool getData(float values[],byte type, byte count){
-  byte addr = vid_mask[type][count];  
+bool getData(float values[],byte type, byte count){  
+
+  if(type<0 || type>DEVICE_TYPES || count<0 || count>SAME_DEVICE_COUNT){  // check if V_ID is in range
+    return false;
+  }
+
+  byte addr = vid_mask[type][count];
+  
+  if(addr == 0){                                                          // check if ID empty
+    return false;                                                         
+  }
+
+  bool available = false;
+  for(int i = 0;i<TOTAL_DEVICES;i++){
+    if(addr==adresses[i]){                // search until end of adress list or until device is found in there
+      available = true;
+      break;
+    }
+  }
+
+  if(!available){                         // no device found
+    return false;
+  }
+
   switch (type)
   {
   case MPU:
     wireWrite(addr,0x3b);
-    if(Wire.requestFrom(addr, 6, true)!=6)return false; 
+    if(Wire.requestFrom((int)addr, 6) != 6)return false; 
     for(int i = 0;i<3;i++){
       values[i]=wireGet();
     }
     wireWrite(addr,0x43);
-    if(Wire.requestFrom(addr, 6, true)!=6)return false;  
+    if(Wire.requestFrom((int)addr, 6) != 6)return false;  
     for(int i = 3;i<6;i++){
       values[i]=wireGet();
       }
@@ -114,14 +136,14 @@ bool getData(float values[],byte type, byte count){
 
   case QMC:
     wireWrite(addr,0x00);
-    if(Wire.requestFrom(addr, 6, true)<1)return false; 
+    if(Wire.requestFrom((int)addr, 6) != 6)return false; 
     for(int i = 0;i<3;i++){
       values[i]=wireGet();
     }
     return true;
 
   case BHL:
-    if(Wire.requestFrom(addr, 2, true)<1)return false;
+    if(Wire.requestFrom((int)addr, 2) != 2)return false;
     values[0]=wireGet();
     return true;
 
@@ -132,9 +154,18 @@ bool getData(float values[],byte type, byte count){
   default:
     break;
   }
+  return false;
 }
 
-
+void addToList(byte mux,byte addr){
+  for(byte p=0;p<TOTAL_DEVICES;p++){
+    if(adresses[p]==0){
+        adresses[p] = addr;     // *puts device into occupied address list
+        Serial.printf("Added device 0x%02x at %d\n",addr,p);
+        break;
+    }
+  }
+}
 
 // Inserts addr into the V_ID Mask, type is decided by 
 // value segregation, first empty slot is used for count 
@@ -147,16 +178,20 @@ bool addToMask(byte mux ,byte addr){
   switch (addr)
   {
   case 0x60 ... 0x70:         // *These define which address could be which device
-    type = 0;
+    type = MPU;
+    setupMPU();
     break;
   case 0x00 ... 0x0f:
-    type = 1;
+    type = QMC;
+    setupQMC();
     break;
   case 0x20 ... 0x30:
-    type = 2;
+    type = BHL;
+    setupBHL();
     break;
   case 0x40 ... 0x50:
-    type = 1;
+    type = REL;
+    setupREL();
     break;
   
   default:
@@ -166,19 +201,30 @@ bool addToMask(byte mux ,byte addr){
 
   for(byte count = 0;count<SAME_DEVICE_COUNT;count++){
     if(vid_mask[type][count] == 0){
-      vid_mask[type][count] = addr; // Add working device to VID Mask 
-      //Serial.printf("Wrote 0x%02x to %01d\n",addr,count);
+      vid_mask[type][count] = addr; // *Add working device to VID Mask 
+      addToList(mux,addr);
       return true;
     }
   }
-
-  int p = 0;
-  while(adresses[p]==0){
-    p++;
-  }
-  adresses[p] = addr;     // puts array into occupied address list
-
   return false;
+}
+
+
+// removes a device from the mask and the list
+// @param type device type based on type table(see top of code)
+// @param count device count 
+// return true once device removed
+bool removeFromMask(byte type, byte count){
+  byte addr = vid_mask[type][count];
+  vid_mask[type][count] = 0;            // remove from mask
+  for(byte i = 0; i<TOTAL_DEVICES;i++){ // remove from list
+    if(adresses[i]==addr){
+      adresses[i] = 0;
+      break;
+    }
+  }
+  return true;
+
 }
 
 // Attempt to reach device at addr
@@ -204,21 +250,30 @@ bool getDeviceData(){
       connections = true;
     }
   }
+
+
+  /* for(byte i=0;adresses[i]!=0;i++){
+    Serial.printf("0x%02x  ",adresses[i]);
+  }
+  Serial.println(""); */
+
+
   return connections;
 }
 
 
 // debug tool for checking device function
-void healthCheck(){
+void healthCheck(bool debugflag){
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected MPUs
     if(vid_mask[MPU][i]!=0){
       float values[6] = { 0 };
-      if(getData(values,MPU,i)){
-        
-        Serial.printf("MPU %01d functional\n", i);
+      if(reachOut(0,vid_mask[MPU][i])){   // *first check connection, then request data to catch faulty connections
+        if(getData(values,MPU,i)){
+          if(debugflag)Serial.printf("MPU %01d functional\n", i);
+        }
       }else{
-        Serial.printf("MPU %01d doesn't return values, removing from table\n", i);
-        //removeDevice(0,i);              // TODO: Remove devices from both table and list
+        if(debugflag)Serial.printf("MPU %01d doesn't return values, removing from table\n", i);
+        removeFromMask(MPU,i);              
       }
     }
   }
@@ -226,10 +281,13 @@ void healthCheck(){
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected QMCs
     if(vid_mask[QMC][i]!=0){
       float values[3] = { 0 };
-      if(getData(values,QMC,i)){
-        Serial.printf("QMC %01d functional\n", i);
+      if(reachOut(0,vid_mask[QMC][i])){
+        if(getData(values,QMC,i)){
+          if(debugflag)Serial.printf("QMC %01d functional\n", i);
+        }
       }else{
-        Serial.printf("QMC %01d doesn't return values\n", i);
+        if(debugflag)Serial.printf("QMC %01d doesn't return values, removing from table\n", i);
+        removeFromMask(QMC,i);
       }
     }
   }
@@ -237,66 +295,55 @@ void healthCheck(){
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected BHLs
     if(vid_mask[2][i]!=0){
       float values[1] = { 0 };
-      if(getData(values,BHL,i)){
-        Serial.printf("BHL %01d functional\n", i);
+      if(reachOut(0,vid_mask[BHL][i])){
+        if(getData(values,BHL,i)){
+          if(debugflag)Serial.printf("BHL %01d functional\n", i);
+        }
       }else{
-        Serial.printf("BHL %01d doesn't return values\n", i);
+        if(debugflag)Serial.printf("BHL %01d doesn't return values, removing from table\n", i);
+        removeFromMask(BHL,i);
       }
     }
   }
 }
 
 // manually triggered by user. Scans for all new devices and then removes ones not responding
-void updateDeviceData(){
-  byte addr_tryout = 0x00;       // current address to try
-  byte p = 0;                 // pointer for occupied list
-  while(addr_tryout<0x80){
-    if(addr_tryout!=adresses[p]){
-      if(reachOut(0x01,addr_tryout)){
-        addToMask(0x01,addr_tryout);
-      }                
-      if(adresses[p]!=0)
-        p++;                  // both numbers are sorted by size so this makes sense
+void updateDeviceData(bool debugflag){
+  bool occupance;                       // flag that tells us if an address is already in use
+  for(byte addr_tryout=0x00;addr_tryout<0x80;addr_tryout++){
+    for(int i = 0;i<TOTAL_DEVICES;i++){
+      occupance = false;
+      if(addr_tryout==adresses[i]){
+        occupance = true;
+        break;
+      }
     }
-  addr_tryout++;  	          // TODO: Error, with every scan another instance of the same device is added
+    if(!occupance){
+      if(reachOut(0x01,addr_tryout)){   // Only add device again if it isnt in use already
+        addToMask(0x01,addr_tryout);
+      }   
+    }	         
   }
-  healthCheck();
+  healthCheck(debugflag);  
 }
 
 
 // Debug tool for displaying all devices contained
 // in V_ID Mask (filled out on startup)
-void printOutMask(){
-  String typeStr;
-  for(int type = 0;type<DEVICE_TYPES;type++){
-    for(int count = 0;count<SAME_DEVICE_COUNT;count++){
-      if(vid_mask[type][count]==0){
-        break;
+void printOutMask(bool debugflag){
+  if(debugflag){
+    Serial.println("   | MPU | QMC | BHL | REL |");
+  for(int i = 0;i<SAME_DEVICE_COUNT;i++){
+    Serial.printf("%03d|",i);
+    for(int j = 0;j<DEVICE_TYPES;j++){
+      if(vid_mask[j][i]==0){
+        Serial.printf(" --- |");
+      }else{
+        Serial.printf(" 0x%02x|",vid_mask[j][i]);
       }
-      typeStr = "";
-      switch (type)
-      {
-        case 0:
-          typeStr += "MPU";
-          break;
-        
-        case 1:
-          typeStr += "QMC";
-          break;
-        
-        case 2:
-          typeStr += "BHL";
-          break;
-
-        case 3:
-          typeStr += "REL";
-          break;
-        
-        default:
-          break;
-      }
-      Serial.printf("%s%02x  ||  0x%02x\n",typeStr,count,vid_mask[type][count]);
     }
+    Serial.println("");
+  }
   }
 }
 
@@ -326,7 +373,7 @@ void setupDevices(bool debugflag) {
   setupREL();
   delay(1000);
   if(debugflag)Serial.println("Testing function...");
-  healthCheck();
+  healthCheck(debugflag);
   delay(1000);
 }
 

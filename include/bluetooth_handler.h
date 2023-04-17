@@ -21,4 +21,4 @@ String IniPacket();
 
 // Debug Tools
 
-void printPackageContents(byte storage[]);
+void printPackageContents(byte storage[],bool debugflag);
