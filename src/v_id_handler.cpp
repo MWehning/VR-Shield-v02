@@ -26,6 +26,20 @@ byte vid_mask[DEVICE_TYPES][SAME_DEVICE_COUNT]={ 0 };
 byte adresses[TOTAL_DEVICES]={ 0 };
 
 
+
+void iniPacket(int16_t ini_devices[]){
+  int i = 0;
+    for(byte type = 0;type<DEVICE_TYPES;type++){
+      for(byte count = 0;count<SAME_DEVICE_COUNT;count++){
+        if(vid_mask[type][count]!=0){
+          byte combined=count + (type << 4);
+          ini_devices[i] = combined;
+          i++;
+        }
+      }
+    }
+}
+
 // writes a single message byte to an I²C device
 // @param addr is the address of said device
 // @param message is the message byte
@@ -35,8 +49,10 @@ void wireWrite(byte addr, byte message){
   Wire.endTransmission(true);
 }
 
-float wireGet(){
-  return(Wire.read() << 8 | Wire.read());
+int16_t wireGet(){
+  float value = Wire.read() << 8 | Wire.read();
+  Serial.printf("%f\n",value);
+  return((int16_t)value);
 }
 
 void setupMPU(){
@@ -90,12 +106,12 @@ void setupREL(){
   } 
 }
 
-// Gets Data from an I²C device specified in other arguments  // TODO: Doesnt return anything if device is only added in rescan
+// Gets Data from an I²C device specified in other arguments  
 // @param values buffer array to store values in
 // @param type device type based on type table(see top of code)
 // @param count device count 
 // @return if it was able to get a value
-bool getData(float values[],byte type, byte count){  
+bool getData(int16_t values[],byte type, byte count){  
 
   if(type<0 || type>DEVICE_TYPES || count<0 || count>SAME_DEVICE_COUNT){  // check if V_ID is in range
     return false;
@@ -121,7 +137,7 @@ bool getData(float values[],byte type, byte count){
 
   switch (type)
   {
-  case MPU:
+  case MPU:                               // TODO: CANT GET VALUES FROM I2C ANYMORE
     wireWrite(addr,0x3b);
     if(Wire.requestFrom((int)addr, 6) != 6)return false; 
     for(int i = 0;i<3;i++){
@@ -179,19 +195,19 @@ bool addToMask(byte mux ,byte addr){
   {
   case 0x60 ... 0x70:         // *These define which address could be which device
     type = MPU;
-    setupMPU();
+    
     break;
   case 0x00 ... 0x0f:
     type = QMC;
-    setupQMC();
+
     break;
   case 0x20 ... 0x30:
     type = BHL;
-    setupBHL();
+
     break;
   case 0x40 ... 0x50:
     type = REL;
-    setupREL();
+
     break;
   
   default:
@@ -240,33 +256,11 @@ bool reachOut(byte mux,byte addr){
   return true;
 }
 
-// Loop through range of adresses and put ones with
-// device attached into V_ID mask (range = 0-127)
-bool getDeviceData(){
-  bool connections = false;
-  for(int addr_tryout = 0x00;addr_tryout<0x80;addr_tryout++){  
-    if(reachOut(0x01,addr_tryout)){
-      addToMask(0x01,addr_tryout);
-      connections = true;
-    }
-  }
-
-
-  /* for(byte i=0;adresses[i]!=0;i++){
-    Serial.printf("0x%02x  ",adresses[i]);
-  }
-  Serial.println(""); */
-
-
-  return connections;
-}
-
-
 // debug tool for checking device function
 void healthCheck(bool debugflag){
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected MPUs
     if(vid_mask[MPU][i]!=0){
-      float values[6] = { 0 };
+      int16_t values[6] = { 0 };
       if(reachOut(0,vid_mask[MPU][i])){   // *first check connection, then request data to catch faulty connections
         if(getData(values,MPU,i)){
           if(debugflag)Serial.printf("MPU %01d functional\n", i);
@@ -280,7 +274,7 @@ void healthCheck(bool debugflag){
 
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected QMCs
     if(vid_mask[QMC][i]!=0){
-      float values[3] = { 0 };
+      int16_t values[3] = { 0 };
       if(reachOut(0,vid_mask[QMC][i])){
         if(getData(values,QMC,i)){
           if(debugflag)Serial.printf("QMC %01d functional\n", i);
@@ -294,7 +288,7 @@ void healthCheck(bool debugflag){
 
   for(int i=0;i<SAME_DEVICE_COUNT;i++){   // get values from all connected BHLs
     if(vid_mask[2][i]!=0){
-      float values[1] = { 0 };
+      int16_t values[1] = { 0 };
       if(reachOut(0,vid_mask[BHL][i])){
         if(getData(values,BHL,i)){
           if(debugflag)Serial.printf("BHL %01d functional\n", i);
@@ -324,6 +318,10 @@ void updateDeviceData(bool debugflag){
       }   
     }	         
   }
+  setupMPU();
+  setupQMC();
+  setupBHL();
+  setupREL();
   healthCheck(debugflag);  
 }
 
@@ -350,7 +348,7 @@ void printOutMask(bool debugflag){
 
 // I²C setup and first scan
 // @param debugflag If true some information will be printed
-void setupDevices(bool debugflag) {
+void enableHardware(bool debugflag) {
   pinMode(I2C_POWER,OUTPUT);
   pinMode(LED_PIN,OUTPUT);
   digitalWrite(I2C_POWER,LOW);
@@ -361,19 +359,4 @@ void setupDevices(bool debugflag) {
   digitalWrite(I2C_POWER,HIGH);
   Wire.begin();
   Serial.begin(115200);
-  delay(1000);
-
-  if(debugflag)Serial.println("Scanning for connected devices...");
-  getDeviceData();
-  delay(1000);
-  if(debugflag)Serial.println("Setting up devices...");
-  setupMPU();
-  setupQMC();
-  setupBHL();
-  setupREL();
-  delay(1000);
-  if(debugflag)Serial.println("Testing function...");
-  healthCheck(debugflag);
-  delay(1000);
 }
-

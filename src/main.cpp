@@ -11,7 +11,7 @@
 
 */
 
-bool updateFlag = false;		// TODO: remove scan on startup and replace with scheduled rescan
+bool updateFlag = false;		
 bool debugflag = true;
 
 #include "bluetooth_handler.h"
@@ -46,15 +46,22 @@ void attachManualScan(){
 	attachInterrupt(GPIO_NUM_0,ISR,FALLING);	// trigger on press
 }
 
+void iniMessage(){
+	byte ini_addr[] = {ID,0xFF,0xFF};
+	int16_t ini_devices[30] = {0};
+	iniPacket(ini_devices);
+	Publish(ini_addr,ini_devices);			
+}
+
 void setup()
 {
-	setupDevices(debugflag);
-	printOutMask(debugflag);
+	enableHardware(debugflag);			// Enable Power for devices and Wire func
+	updateFlag = true;					// Schedule device scan
 	greetings(SetupBluetooth() && SetupSerial(),debugflag);
 	attachManualScan();
 
 	previousMillis = millis();
-	// Publish(IniPacket());			// TODO: Publish a packet containing all connected devices
+	
 }
 
 void loop()
@@ -63,7 +70,7 @@ void loop()
 		printPackageContents(storage,debugflag);	// write received adress into storage buffer 
 													// if full message received
 		if(storage[0]==ID){					// MCU Addr correct?
-			float buffer[9]= { 0 };			// empty buffer to fullfil data request [0,0,0,0,0,0,0,0,0]
+			int16_t buffer[9]= { 0 };			// empty buffer to fullfil data request [0,0,0,0,0,0,0,0,0]
 			byte type = storage[1]>>4;     	// <--Left 4 bits form device type
 			byte count= storage[1] & 0xf;  	// -->Right 4 bits form device count
 			getData(buffer,type,count);		// get data from adress 							// TODO: Add to active_process table
@@ -75,10 +82,12 @@ void loop()
 
 	if (millis() - previousMillis > 1000)	// only executed once every second	
 	{
+
 		if(updateFlag){						// button was triggered so rescan is scheduled
 			updateFlag = false;
 			updateDeviceData(debugflag);
 			printOutMask(debugflag);
+			iniMessage();
 		}
 		previousMillis = millis();
 	}

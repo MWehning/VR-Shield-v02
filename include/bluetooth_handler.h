@@ -12,12 +12,11 @@ void greetings(bool state, bool debugflag);
 // Port register management
 
 bool Receiver(byte storage[]);
-void Publish(uint8_t addr[],float msg[]);
+void Publish(uint8_t addr[],int16_t msg[]);
 
 //Packet builders
 
 bool PacketBuilder(uint16_t contents[]);
-String IniPacket();
 
 // Debug Tools
 

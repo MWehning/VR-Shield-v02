@@ -50,11 +50,13 @@ void greetings(bool state,bool debugflag){
 
 }
 
+
+
 // Publishes a message or packet on Serial as well as Bluetooth
 // @param addr[] address to be echoed
 // @param msg[] data that will be appended
 // @return A message in the correct format on both ports
-void Publish(uint8_t addr[],float msg[])
+void Publish(uint8_t addr[],int16_t msg[])
 {
     Serial.write(0xaa);
     SerialBT.write(0xaa);
@@ -65,8 +67,8 @@ void Publish(uint8_t addr[],float msg[])
     }
     for (int i = 0; msg[i]!=0; i++) // Write everything from msg buffer
     {
-        byte hi = highByte((int)msg[i]);
-        byte lo = lowByte((int)msg[i]);
+        byte hi = highByte(msg[i]);
+        byte lo = lowByte(msg[i]);
         Serial.write(hi);
         SerialBT.write(hi);
         Serial.write(lo);
