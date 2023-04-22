@@ -1,5 +1,5 @@
 /*
-	VR-Shield Project
+	*-VR-Shield Project-*
 
 	hard and software system that simplifies linking i2c sensors to other systems over bluetooth
 
@@ -7,7 +7,7 @@
 	*Supported sensors: MPU6050, QMC5883L, BH1750 (Attached using VR-Dapter board)
 
 	@author MWehning
-	@version 3.0 14/04/2023
+	@version 3.0 22/04/2023
 
 */
 
@@ -21,13 +21,20 @@ bool debugflag = true;
 #define ID	0x01
 
 // device matrice sizing 
-#define SAME_DEVICE_COUNT 5
-#define DEVICE_TYPES      4
+#define SAME_DEVICE_COUNT 	5
+#define DEVICE_TYPES      	4
+
+#define DATA_RETRIEVAL_RATE	10	//(ms)
+#define REL_TIMEOUT			10000 	//(ms)
+
+
+#define TASK_TIMEOUT		(REL_TIMEOUT/DATA_RETRIEVAL_RATE)
 
 
 unsigned long previousMillis;
 
 byte storage[4]; 				// stores current requested address
+int16_t data_buffer[9]= { 0 };	// empty buffer to fullfil data request [0,0,0,0,0,0,0,0,0]			// int limit
 
 bool active_processes[DEVICE_TYPES][SAME_DEVICE_COUNT] = { 0 };		
 // uses the same grid as vid table, 
@@ -69,25 +76,35 @@ void loop()
 	if(Receiver(storage)){							// can "digest" 1 byte per loop
 		printPackageContents(storage,debugflag);	// write received adress into storage buffer 
 													// if full message received
-		if(storage[0]==ID){					// MCU Addr correct?
-			int16_t buffer[9]= { 0 };			// empty buffer to fullfil data request [0,0,0,0,0,0,0,0,0]
-			byte type = storage[1]>>4;     	// <--Left 4 bits form device type
-			byte count= storage[1] & 0xf;  	// -->Right 4 bits form device count
-			getData(buffer,type,count);		// get data from adress 							// TODO: Add to active_process table
-			Publish(storage,buffer);		// Respond with an echo + requested data			// TODO: if something isnt accessed for a long time remove again
+		if(storage[0]==ID){							// MCU Addr correct?
+			if(storage[1]==0xff){					// request for device list?
+				updateDeviceData(debugflag);		// rescan if Unity Scan is pressed
+				iniMessage();						// deliver list 
+			}
+			
+			for(int i =0;i<9;i++){
+				data_buffer[i]=0;					// TODO: Make this int limit and apply this too resulting functions and other arrays too
+			}
+			byte type = storage[1]>>4;     		// <--Left 4 bits form device type
+			byte count= storage[1] & 0xf;  		// -->Right 4 bits form device count
+			getFilteredData(data_buffer,type,count,TASK_TIMEOUT);
+			//getData(buffer,type,count);		// get data from adress 							
+			Publish(storage,data_buffer);		// Respond with an echo + requested data			
 		}
 	}
 	
 
 
-	if (millis() - previousMillis > 1000)	// only executed once every second	
+	if (millis() - previousMillis > DATA_RETRIEVAL_RATE)	// only executed once every second	
 	{
+		updateTasks();						// counts down task timeout
+		executeTasks();				
 
+		//printOutTasks(debugflag);
 		if(updateFlag){						// button was triggered so rescan is scheduled
 			updateFlag = false;
 			updateDeviceData(debugflag);
-			printOutMask(debugflag);
-			iniMessage();
+			//printOutMask(debugflag);
 		}
 		previousMillis = millis();
 	}

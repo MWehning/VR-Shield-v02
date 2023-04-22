@@ -6,6 +6,10 @@
 #define DEVICE_TYPES      4
 #define TOTAL_DEVICES     SAME_DEVICE_COUNT*DEVICE_TYPES
 
+// filter options
+#define AMOUNT_OF_VALUES  9
+#define FILTER_BACKLOG    3
+
 // pin defines
 #define LED_PIN           32
 #define I2C_POWER         19
@@ -16,6 +20,7 @@
 #define BHL               2
 #define REL               3
 
+
 // Device type conversion: 
 // _00_|_01_|_02_|_03_|_04_|________
 // 0x16| ...|    |    |    | 0=>MPU
@@ -23,6 +28,34 @@
 //     |    |    |    |    | 2=>BHL
 //     |    |    |    |    | 3=>REL
 byte vid_mask[DEVICE_TYPES][SAME_DEVICE_COUNT]={ 0 };
+
+// Keep track on which devices to generate filtered data for
+// ! when called once timeout will be set to TASKTIMEOUT and then 
+// ! needs to be refreshed or after that timeframe it will deactivate the task
+int active_tasks[DEVICE_TYPES][SAME_DEVICE_COUNT]={ 0 }; 
+
+int16_t data[DEVICE_TYPES][SAME_DEVICE_COUNT][9]={ 0 };
+
+/*
+int active = 0;
+for(int i=0;i<FILTER_BACKLOG;i++){
+  for(int j=0;j<AMOUNT_OF_VALUES;j++){
+    task[active].values[i][j]=task[0].values[i+1][j];
+    task[active].sum[j]+=task[active].values[i][j];     // first add up everything
+  }
+}
+for(int i=0;i<AMOUNT_OF_VALUES;i++){
+  task[0].values[FILTER_BACKLOG-1][j]=new_values[j];
+  task[active].average[j]+=new_values[j];              // first add up everything
+}
+for(int i=0;i<AMOUNT_OF_VALUES;i++){
+  task[active].average[i]==(task[active].average[i]/FILTER_BACKLOG);  // average of everything
+}
+*/
+
+
+
+// simple list of all connected adresses for backchecks
 byte adresses[TOTAL_DEVICES]={ 0 };
 
 
@@ -49,9 +82,31 @@ void wireWrite(byte addr, byte message){
   Wire.endTransmission(true);
 }
 
+// Tick! Tock! Counts down task timeout and kills them once their time is up
+void updateTasks(){
+  for(int type=0;type<DEVICE_TYPES;type++){
+    for(int count = 0;count<SAME_DEVICE_COUNT;count++){
+      if(active_tasks[type][count]>0){
+        active_tasks[type][count]--;          // decrease by one if > 0
+      }
+    }
+  }
+}
+
+//reset task timeout so it stays active
+// @param type device type based on type table(see top of code)
+// @param count device count 
+void kickTask(byte type, byte count,int timeout){
+  if(vid_mask[type][count]!=0){                     // device in use?
+    active_tasks[type][count]=timeout;
+  }
+}
+
+
+
+// gets a single byte from designated I²C shift registers
 int16_t wireGet(){
   float value = Wire.read() << 8 | Wire.read();
-  Serial.printf("%f\n",value);
   return((int16_t)value);
 }
 
@@ -137,7 +192,7 @@ bool getData(int16_t values[],byte type, byte count){
 
   switch (type)
   {
-  case MPU:                               // TODO: CANT GET VALUES FROM I2C ANYMORE
+  case MPU:                             
     wireWrite(addr,0x3b);
     if(Wire.requestFrom((int)addr, 6) != 6)return false; 
     for(int i = 0;i<3;i++){
@@ -173,11 +228,23 @@ bool getData(int16_t values[],byte type, byte count){
   return false;
 }
 
-void addToList(byte mux,byte addr){
+void getFilteredData(int16_t values[], byte type, byte count, int timeout){
+  if(active_tasks[type][count]>0){
+    for(int i = 0;i<9;i++){         // use sensor values from filtered table, (filter applied on execution) 
+      values[i]=data[type][count][i];
+    }
+  }else{
+    getData(values,type,count);     // data not available through task, has to use raw data 
+    kickTask(type,count,timeout);   // turn on task for this
+  }
+  
+}
+
+void addToList(byte mux,byte addr,bool debugFlag){
   for(byte p=0;p<TOTAL_DEVICES;p++){
     if(adresses[p]==0){
         adresses[p] = addr;     // *puts device into occupied address list
-        Serial.printf("Added device 0x%02x at %d\n",addr,p);
+        if(debugFlag)Serial.printf("Added device 0x%02x at %d\n",addr,p);
         break;
     }
   }
@@ -188,7 +255,7 @@ void addToList(byte mux,byte addr){
 // @param mux Multiplexer to be used
 // @param addr Address of device to be used
 // @return false if device somehow cant be added
-bool addToMask(byte mux ,byte addr){ 
+bool addToMask(byte mux ,byte addr, bool debugFlag){ 
 
   byte type = 0;    
   switch (addr)
@@ -218,7 +285,7 @@ bool addToMask(byte mux ,byte addr){
   for(byte count = 0;count<SAME_DEVICE_COUNT;count++){
     if(vid_mask[type][count] == 0){
       vid_mask[type][count] = addr; // *Add working device to VID Mask 
-      addToList(mux,addr);
+      addToList(mux,addr,debugFlag);
       return true;
     }
   }
@@ -314,7 +381,7 @@ void updateDeviceData(bool debugflag){
     }
     if(!occupance){
       if(reachOut(0x01,addr_tryout)){   // Only add device again if it isnt in use already
-        addToMask(0x01,addr_tryout);
+        addToMask(0x01,addr_tryout,debugflag);
       }   
     }	         
   }
@@ -325,6 +392,26 @@ void updateDeviceData(bool debugflag){
   healthCheck(debugflag);  
 }
 
+void executeTasks(){
+  for(int type = MPU;type<DEVICE_TYPES;type++){
+    for(int count = 0;count<SAME_DEVICE_COUNT;count++){
+      if(active_tasks[type][count]>0){
+        int16_t new_data[9] = { 0 };
+        getData(new_data,type,count);             
+        for(int i = 0;i<9;i++){
+          data[type][count][i]=(data[type][count][i]+new_data[i])/2;
+        }
+        Serial.printf("Filtered values for %d:%d = ",type,count);
+        for(int i=0;i<9;i++){
+          if(data[type][count][i]!=0)
+            Serial.printf("%05d ",data[type][count][i]);
+        }
+        Serial.printf("\n");
+      }
+        
+    }
+  }
+}
 
 // Debug tool for displaying all devices contained
 // in V_ID Mask (filled out on startup)
@@ -338,6 +425,23 @@ void printOutMask(bool debugflag){
         Serial.printf(" --- |");
       }else{
         Serial.printf(" 0x%02x|",vid_mask[j][i]);
+      }
+    }
+    Serial.println("");
+  }
+  }
+}
+
+void printOutTasks(bool debugflag){
+  if(debugflag){
+    Serial.println("   | MPU | QMC | BHL | REL |");
+  for(int i = 0;i<SAME_DEVICE_COUNT;i++){
+    Serial.printf("%03d|",i);
+    for(int j = 0;j<DEVICE_TYPES;j++){
+      if(active_tasks[j][i]==0){
+        Serial.printf(" --- |");
+      }else{
+        Serial.printf("  %02d |",active_tasks[j][i]);
       }
     }
     Serial.println("");
