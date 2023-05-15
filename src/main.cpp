@@ -57,7 +57,12 @@ void iniMessage(){
 	byte ini_addr[] = {ID,0xFF,0xFF};
 	int16_t ini_devices[30] = {0};
 	iniPacket(ini_devices);
-	Publish(ini_addr,ini_devices);			
+	// TODO: !! MPU0 is 00, so the byte is 0, which stops the transmission when sending the scan message. Will be solved by turning the filler into -1
+	Publish(ini_addr,ini_devices);	
+	for(int i = 0;i<9;i++){
+		data_buffer[i] = 0;						// clean buffer for next use
+	}	
+	
 }
 
 void setup()
@@ -80,16 +85,23 @@ void loop()
 			if(storage[1]==0xff){					// request for device list?
 				updateDeviceData(debugflag);		// rescan if Unity Scan is pressed
 				iniMessage();						// deliver list 
-			}
-			
-			for(int i =0;i<9;i++){
+			}else{
+				for(int i =0;i<9;i++){
 				data_buffer[i]=0;					// TODO: Make this int limit and apply this too resulting functions and other arrays too
 			}
+			
 			byte type = storage[1]>>4;     		// <--Left 4 bits form device type
 			byte count= storage[1] & 0xf;  		// -->Right 4 bits form device count
-			getFilteredData(data_buffer,type,count,TASK_TIMEOUT);
+
+			Serial.println(storage[2]);
+			getSensorValues(data_buffer,storage[2],type,count,TASK_TIMEOUT);	//  data  with data type storage[2] requested			
+			
+			
 			//getData(buffer,type,count);		// get data from adress 							
 			Publish(storage,data_buffer);		// Respond with an echo + requested data			
+			}
+			
+			
 		}
 	}
 	
@@ -97,6 +109,7 @@ void loop()
 
 	if (millis() - previousMillis > DATA_RETRIEVAL_RATE)	// only executed once every second	
 	{
+		previousMillis = millis();
 		updateTasks();						// counts down task timeout
 		executeTasks();				
 
@@ -106,6 +119,6 @@ void loop()
 			updateDeviceData(debugflag);
 			//printOutMask(debugflag);
 		}
-		previousMillis = millis();
+		
 	}
 }

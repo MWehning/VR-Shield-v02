@@ -67,8 +67,10 @@ void Publish(uint8_t addr[],int16_t msg[])
     }
     for (int i = 0; msg[i]!=0; i++) // Write everything from msg buffer
     {
+        Serial.printf(" %d ",msg[i]);
         byte hi = highByte(msg[i]);
         byte lo = lowByte(msg[i]);
+        //Serial.printf("\n0x%02x 0x%02x\n",hi,lo);
         Serial.write(hi);
         SerialBT.write(hi);
         Serial.write(lo);
@@ -207,6 +209,6 @@ bool Receiver(byte storage[PKGSIZE])
 void printPackageContents(byte storage[],bool debugflag)
 {
     if(debugflag){
-        Serial.printf("e:0x%02x:0x%02x:0x%02x:e\n",storage[0],storage[1],storage[2]);
+        Serial.printf("\ne:0x%02x:0x%02x:0x%02x:e\n",storage[0],storage[1],storage[2]);
     }
 }

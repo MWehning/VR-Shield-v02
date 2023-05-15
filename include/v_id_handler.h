@@ -16,8 +16,7 @@ void printOutTasks(bool debugflag);
 // Data
 
 void getData(int16_t values[],byte type, byte count);
-void getFilteredData(int16_t values[], byte type, byte count, int timeout);
-
+void getSensorValues(int16_t values[], byte datatype, byte type, byte count, int timeout);
 // Task System
 
 void kickTask(byte type, byte count,int timeout);
