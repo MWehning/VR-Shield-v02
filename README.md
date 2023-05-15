@@ -4,3 +4,5 @@ Normally Virtual Reality Tracking or Sensor Systems are often in a closed ecosys
 # Hardware
 The VR-Shield system consists of multiple components, the program provided in this repository is the one controlling the central microcontroller unit.
 For detailed instructions and to see all the other components please visit:
+
+https://www.openhardware.io/view/33050
